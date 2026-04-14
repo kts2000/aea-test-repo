@@ -1,18 +1,24 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-class Item(BaseModel):
-    id: int
+
+class ItemBase(BaseModel):
     name: str
     description: Optional[str] = None
     price: float
     in_stock: bool
 
-class ItemCreate(Item):
+
+class ItemCreate(ItemBase):
     pass
 
-class ItemUpdate(Item):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[float] = None
-    in_stock: Optional[bool] = None
+
+class ItemUpdate(ItemBase):
+    pass
+
+
+class Item(ItemBase):
+    id: int
+
+    class Config:
+        orm_mode = True
