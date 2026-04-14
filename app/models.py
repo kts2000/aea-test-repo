@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 
+# Pydantic models
 
 class ItemBase(BaseModel):
     name: str
@@ -12,8 +13,10 @@ class ItemBase(BaseModel):
 class ItemCreate(ItemBase):
     pass
 
+
 class ItemUpdate(ItemBase):
     pass
+
 
 class ItemInDB(ItemBase):
     id: int
