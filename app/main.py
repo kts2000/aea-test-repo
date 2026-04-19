@@ -1,59 +1,69 @@
-from fastapi import FastAPI, HTTPException, Path, Query, Depends, status
-from app.models import Item, ItemCreate, ItemUpdate, Items
+import uvicorn
+from fastapi import FastAPI, HTTPException, Path, Body, Depends
+from pydantic import BaseModel, validator
 from typing import List, Optional
+from app.models import Item, ItemCreate, ItemUpdate
 from uuid import uuid4, UUID
 
 app = FastAPI()
 
+items = []
+
 # In-memory data store
-items: List[Item] = []
+class InMemoryStore:
+    def add_item(self, item: Item) -> int:
+        item.id = len(items) + 1
+        items.append(item)
+        return item.id
 
-# Helper function to get an item by ID
-async def get_item_by_id(id: UUID) -> Optional[Item]:
-    return next((item for item in items if item.id == id), None)
+    def get_item(self, item_id: int) -> Optional[Item]:
+        return next((item for item in items if item.id == item_id), None)
 
-# Helper function to create a new item ID
-async def create_new_item_id() -> UUID:
-    return uuid4()
+    def update_item(self, item_id: int, item: Item) -> Optional[Item]:
+        existing_item = self.get_item(item_id)
+        if existing_item:
+            existing_item.name = item.name
+            existing_item.description = item.description
+            existing_item.price = item.price
+            existing_item.in_stock = item.in_stock
+            return existing_item
+        return None
 
-# GET /items
-@app.get('/items', response_model=List[Item], status_code=status.HTTP_200_OK)
-def read_items():
-    return items
+    def delete_item(self, item_id: int) -> bool:
+        global items
+        items = [item for item in items if item.id != item_id]
+        return True if item_id in [item.id for item in items] else False
 
-# POST /items
-@app.post('/items', response_model=Item, status_code=status.HTTP_201_CREATED)
-def create_item(item: ItemCreate):
-    new_item = Item(**item.dict(), id=create_new_item_id())
-    items.append(new_item)
+store = InMemoryStore()
+
+@app.post('/items', response_model=Item, status_code=201)
+def create_item(item: ItemCreate) -> Item:
+    new_item = Item(**item.dict())
+    item_id = store.add_item(new_item)
+    new_item.id = item_id
     return new_item
 
-# GET /items/{id}
-@app.get('/items/{id}', response_model=Item, status_code=status.HTTP_200_OK)
-def read_item(id: UUID = Path(..., title='The ID of the item to get')):
-    item = get_item_by_id(id)
+@app.get('/items', response_model=List[Item])
+def read_items() -> List[Item]:
+    return items
+
+@app.get('/items/{item_id}', response_model=Item, status_code=200)
+def read_item(item_id: int = Path(..., gt=0)) -> Item:
+    item = store.get_item(item_id)
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Item not found')
+        raise HTTPException(status_code=404, detail='Item not found')
     return item
 
-# PUT /items/{id}
-@app.put('/items/{id}', response_model=Item, status_code=status.HTTP_200_OK)
-def update_item(id: UUID = Path(..., title='The ID of the item to update'), item: ItemUpdate):
-    existing_item = get_item_by_id(id)
-    if existing_item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Item not found')
-
-    update_data = item.dict(exclude_unset=True)
-    updated_item = Item(**existing_item.dict(), **update_data)
-    items.remove(existing_item)
-    items.append(updated_item)
+@app.put('/items/{item_id}', response_model=Item, status_code=200)
+def update_item(item_id: int = Path(..., gt=0), item: ItemUpdate = Body(...)) -> Item:
+    updated_item = store.update_item(item_id, Item(**item.dict()))
+    if updated_item is None:
+        raise HTTPException(status_code=404, detail='Item not found')
     return updated_item
 
-# DELETE /items/{id}
-@app.delete('/items/{id}', status_code=status.HTTP_204_NO_CONTENT)
-def delete_item(id: UUID = Path(..., title='The ID of the item to delete')):
-    existing_item = get_item_by_id(id)
-    if existing_item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Item not found')
-    items.remove(existing_item)
-    return None
+@app.delete('/items/{item_id}', status_code=200)
+def delete_item(item_id: int = Path(..., gt=0)) -> bool:
+    success = store.delete_item(item_id)
+    if not success:
+        raise HTTPException(status_code=404, detail='Item not found')
+    return success
