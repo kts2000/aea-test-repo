@@ -1,22 +1,22 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List, UUID
-from uuid import UUID, uuid4
+from pydantic import BaseModel
+from typing import Optional
 
-# Item model
+# Pydantic models
 class Item(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
+    id: int
     name: str
-    description: Optional[str] = None
+    description: Optional[str]
     price: float
     in_stock: bool
 
-# Item create model
 class ItemCreate(Item):
-    id: None = None
+    name: str
+    description: Optional[str]
+    price: float
+    in_stock: bool
 
-# Item update model
 class ItemUpdate(Item):
-    id: Optional[UUID] = None
-
-# List of items
-Items = List[Item]
+    name: Optional[str]
+    description: Optional[str]
+    price: Optional[float]
+    in_stock: Optional[bool]
