@@ -1,44 +1,22 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
-from uuid import UUID
-from datetime import datetime
+from typing import Optional, List, UUID
+from uuid import UUID, uuid4
 
-# Pydantic model for item input
-class ItemCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    price: float
-    in_stock: bool
-
-    class Config:
-        orm_mode = True
-
-# Pydantic model for item update
-class ItemUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[float] = None
-    in_stock: Optional[bool] = None
-
-    class Config:
-        orm_mode = True
-
-# Pydantic model for item output
+# Item model
 class Item(BaseModel):
-    id: int
+    id: UUID = Field(default_factory=uuid4)
     name: str
     description: Optional[str] = None
     price: float
     in_stock: bool
 
-    class Config:
-        orm_mode = True
+# Item create model
+class ItemCreate(Item):
+    id: None = None
 
-# Custom Pydantic model for in-memory storage
-class ItemInDB(Item):
-    id: UUID
-    created_at: datetime
-    updated_at: datetime
+# Item update model
+class ItemUpdate(Item):
+    id: Optional[UUID] = None
 
-    class Config:
-        orm_mode = True
+# List of items
+Items = List[Item]
