@@ -1,80 +1,59 @@
-from fastapi import FastAPI, HTTPException, Path, Depends, Query, status
-from app.models import Item, ItemCreate, ItemUpdate, ItemInDB
+from fastapi import FastAPI, HTTPException, Path, Query, Depends, status
+from app.models import Item, ItemCreate, ItemUpdate, Items
 from typing import List, Optional
 from uuid import uuid4, UUID
-from pydantic import BaseModel
-from datetime import datetime
-import logging
-
-logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
-items_db: List[ItemInDB] = []
-id_generator = 1
+# In-memory data store
+items: List[Item] = []
 
-# Pydantic model for HTTP responses
-class ItemOut(Item):
-    id: int
-    name: str
-    description: Optional[str] = None
-    price: float
-    in_stock: bool
-    created_at: datetime
-    updated_at: datetime
+# Helper function to get an item by ID
+async def get_item_by_id(id: UUID) -> Optional[Item]:
+    return next((item for item in items if item.id == id), None)
 
-    class Config:
-        orm_mode = True
+# Helper function to create a new item ID
+async def create_new_item_id() -> UUID:
+    return uuid4()
 
-# Custom exception for item not found
-class ItemNotFoundException(HTTPException):
-    def __init__(self, item_id: UUID):
-        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=f'Item with ID {item_id} not found')
+# GET /items
+@app.get('/items', response_model=List[Item], status_code=status.HTTP_200_OK)
+def read_items():
+    return items
 
-# Utility function to find item by ID
-def _find_item(item_id: UUID) -> Optional[ItemInDB]:
-    return next((item for item in items_db if item.id == item_id), None)
+# POST /items
+@app.post('/items', response_model=Item, status_code=status.HTTP_201_CREATED)
+def create_item(item: ItemCreate):
+    new_item = Item(**item.dict(), id=create_new_item_id())
+    items.append(new_item)
+    return new_item
 
-
-@app.post('/items/', response_model=ItemOut, status_code=status.HTTP_201_CREATED)
-async def create_item(item: ItemCreate) -> ItemInDB:
-    global id_generator
-    item_id = UUID(str(id_generator))
-    item_in_db = ItemInDB(**item.dict(), id=item_id)
-    items_db.append(item_in_db)
-    return item_in_db
-
-@app.get('/items/', response_model=List[ItemOut])
-async def read_items() -> List[ItemInDB]:
-    return items_db
-
-@app.get('/items/{item_id}', response_model=ItemOut)
-async def read_item(item_id: UUID = Path(..., title='The ID of the item to retrieve')) -> ItemInDB:
-    item = _find_item(item_id)
-    if not item:
-        raise ItemNotFoundException(item_id)
+# GET /items/{id}
+@app.get('/items/{id}', response_model=Item, status_code=status.HTTP_200_OK)
+def read_item(id: UUID = Path(..., title='The ID of the item to get')):
+    item = get_item_by_id(id)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Item not found')
     return item
 
-@app.put('/items/{item_id}', response_model=ItemOut)
-async def update_item(
-    item_id: UUID = Path(..., title='The ID of the item to update'),
-    item: ItemUpdate = Depends()
-) -> ItemInDB:
-    item_in_db = _find_item(item_id)
-    if not item_in_db:
-        raise ItemNotFoundException(item_id)
+# PUT /items/{id}
+@app.put('/items/{id}', response_model=Item, status_code=status.HTTP_200_OK)
+def update_item(id: UUID = Path(..., title='The ID of the item to update'), item: ItemUpdate):
+    existing_item = get_item_by_id(id)
+    if existing_item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Item not found')
 
-    item_data = item.dict(exclude_unset=True)
-    for key, value in item_data.items():
-        setattr(item_in_db, key, value)
-        item_in_db.updated_at = datetime.now()
+    update_data = item.dict(exclude_unset=True)
+    updated_item = Item(**existing_item.dict(), **update_data)
+    items.remove(existing_item)
+    items.append(updated_item)
+    return updated_item
 
-    return item_in_db
-
-@app.delete('/items/{item_id}', status_code=status.HTTP_204_NO_CONTENT)
-async def delete_item(item_id: UUID = Path(..., title='The ID of the item to delete')) -> None:
-    global items_db
-    item = _find_item(item_id)
-    if not item:
-        raise ItemNotFoundException(item_id)
-    items_db = [i for i in items_db if i.id != item_id]
+# DELETE /items/{id}
+@app.delete('/items/{id}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_item(id: UUID = Path(..., title='The ID of the item to delete')):
+    existing_item = get_item_by_id(id)
+    if existing_item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Item not found')
+    items.remove(existing_item)
+    return None
